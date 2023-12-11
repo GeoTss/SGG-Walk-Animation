@@ -1,0 +1,1 @@
+g++ -std=c++17 -I/opt/homebrew/Cellar/../include -L/opt/homebrew/Cellar/../lib -O2 -L/Users/giorgostsorakos/Documents/sgg/lib -I/Users/giorgostsorakos/Documents/sgg test.cpp -o test -lsgg -lGLEW -lSDL2 -lSDL2_mixer -lfreetype -framework OpenGL
