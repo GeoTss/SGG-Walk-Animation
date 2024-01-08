@@ -5,11 +5,15 @@
 #include <iostream>
 #include "AnimationHandler.hpp"
 #include "State.hpp"
+#include "box.h"
+#include <list>
 
 #define MAX_COMPONENTS 16
+#define MAX_STATES 7
 
 class Component;
 class GameObject;
+class Manager;
 
 class Component {
 public:
@@ -17,7 +21,7 @@ public:
     bool m_canInteruptState;
 
     virtual void init() {}
-    virtual void update() {}
+    virtual void update(float dt) {}
     virtual void draw() {}
     virtual bool stateInteruptions() { return false; }
 };
@@ -32,23 +36,25 @@ template<typename T> inline u_int16_t getComponentTypeID() noexcept {
     return typeID;
 }
 
-class GameObject: public Box {
+class GameObject {
 protected:
+
     State *m_state;
-    bool m_active;
 
     std::vector<Component *> m_componentVector;
-    std::vector<Component*> m_possibleStateInteruprionComponents;
+    std::vector<Component *> m_possibleStateInteruprionComponents;
     std::array<Component *, MAX_COMPONENTS> m_componentArray;
+    // std::list<State *> m_stateList; // O(1) insertion-deletion time and we will traverse the whole list every update so traverse will always be O(n);
+
 
     u_int16_t m_componentBitset;
 public:
+    bool m_active;
+    Manager* m_manager;
 
     GameObject() {
         m_active = true;
     }
-
-    void setState(State *state) { m_state = state; }
 
     bool isActive() const { return m_active; }
 
@@ -56,9 +62,9 @@ public:
         for (Component *&c : m_componentVector)
             c->init();
     }
-    virtual void update() {
+    virtual void update(float dt) {
         for (Component *&c : m_componentVector)
-            c->update();
+            c->update(dt);
     }
     virtual void draw() {
         for (Component *&c : m_componentVector)
@@ -73,18 +79,21 @@ public:
         return static_cast<T *>(m_componentArray[getComponentTypeID<T>()]);
     }
 
-    template<typename T>
-    void addComponent(T *&&c_ptr) {
+    template<typename T, typename... TArgs>
+    T *addComponent(TArgs&&... args) {
         if (hasComponent<T>())
-            return;
+            return getComponent<T>();
+
+        T *c_ptr(new T(std::forward<TArgs>(args)...));
         c_ptr->m_owner = this;
         c_ptr->init();
         m_componentBitset = m_componentBitset | (1 << getComponentTypeID<T>());
         m_componentArray[getComponentTypeID<T>()] = c_ptr;
-        if(c_ptr->m_canInteruptState)
+        if (c_ptr->m_canInteruptState)
             m_possibleStateInteruprionComponents.emplace_back(c_ptr);
-        
-        m_componentVector.emplace_back(std::move(c_ptr));
+
+        m_componentVector.emplace_back(c_ptr);
+        return c_ptr;
     }
 
     virtual bool canUpdateState() { return false; }
@@ -96,9 +105,13 @@ private:
     std::vector<GameObject *> m_entityList;
 public:
 
-    template<typename T>
-    T *addGameObject() {
-        T *newObj = new T;
+    const auto &getEntityList() const { return m_entityList; }
+
+    template<typename T, typename... TArgs>
+    T *addGameObject(TArgs&&... args) {
+        T *newObj = new T(std::forward<TArgs>(args)...);
+        ((GameObject*)newObj)->m_active = true;
+        ((GameObject*)newObj)->m_manager = this;
         m_entityList.emplace_back(newObj);
         return newObj;
     }
@@ -108,9 +121,9 @@ public:
             obj->init();
     }
 
-    void update() {
+    void update(float dt) {
         for (auto &obj : m_entityList)
-            obj->update();
+            obj->update(dt);
     }
 
     void refresh() {
